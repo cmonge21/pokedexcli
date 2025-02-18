@@ -25,6 +25,9 @@ func NewCache(interval time.Duration) *Cache {
 }
 
 func (c *Cache) reapLoop() {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	
 	ticker := time.NewTicker(c.interval)
 	defer ticker.Stop() 
 
