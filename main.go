@@ -9,6 +9,9 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
+
+	"github.com/cmonge21/pokedexcli/internal/pokecache"
 )
 
 type cliCommand struct {
@@ -52,30 +55,38 @@ func commandHelp() error {
 	return nil
 }
 
-func commandMap(cfg *Config) error {
+func commandMap(cfg *Config, cache *pokecache.Cache) error {
 	var resp LocationAreaResp
-
 	url := cfg.NextURL
+
 	if url == "" {
 		url = "https://pokeapi.co/api/v2/location-area"
 	}
 
-	res, err := http.Get(url)
-	if err != nil {
-		log.Fatal(err)
-	}
+	if cachedData, ok := cache.Get(url); ok {
+		if err := json.Unmarshal(cachedData, &resp); err != nil {
+			return err
+		}
+	} else {
+		res, err := http.Get(url)
+		if err != nil {
+			log.Fatal(err)
+		}
 
-	body, err := io.ReadAll(res.Body)
-	res.Body.Close()
-	if res.StatusCode > 299 {
-		log.Fatalf("Response failed with status code: %d and\n body: %s\n", res.StatusCode, body)
-	}
-	if err != nil {
-		log.Fatal(err)
-	}
+		body, err := io.ReadAll(res.Body)
+		res.Body.Close()
+		if res.StatusCode > 299 {
+			log.Fatalf("Response failed with status code: %d and\n body: %s\n", res.StatusCode, body)
+		}
+		if err != nil {
+			log.Fatal(err)
+		}
 
-	if err = json.Unmarshal(body, &resp); err != nil {
-		return err
+		cache.Add(url, body)
+
+		if err = json.Unmarshal(body, &resp); err != nil {
+			return err
+		}
 	}
 
 	cfg.NextURL = resp.Next
@@ -87,7 +98,7 @@ func commandMap(cfg *Config) error {
 	return nil
 }
 
-func commandMapb(cfg *Config) error {
+func commandMapb(cfg *Config, cache *pokecache.Cache) error {
 	if cfg.PreviousURL == "" {
 		fmt.Println("You're on the first page")
 		return nil
@@ -100,22 +111,30 @@ func commandMapb(cfg *Config) error {
 		url = "https://pokeapi.co/api/v2/location-area"
 	}
 
-	res, err := http.Get(url)
-	if err != nil {
-		log.Fatal(err)
-	}
+	if cachedData, ok := cache.Get(url); ok {
+		if err := json.Unmarshal(cachedData, &resp); err != nil {
+			return err
+		}
+	} else {
+		res, err := http.Get(url)
+		if err != nil {
+			log.Fatal(err)
+		}
 
-	body, err := io.ReadAll(res.Body)
-	res.Body.Close()
-	if res.StatusCode > 299 {
-		log.Fatalf("Response failed with status code: %d and\n body: %s\n", res.StatusCode, body)
-	}
-	if err != nil {
-		log.Fatal(err)
-	}
+		body, err := io.ReadAll(res.Body)
+		res.Body.Close()
+		if res.StatusCode > 299 {
+			log.Fatalf("Response failed with status code: %d and\n body: %s\n", res.StatusCode, body)
+		}
+		if err != nil {
+			log.Fatal(err)
+		}
 
-	if err = json.Unmarshal(body, &resp); err != nil {
-		return err
+		cache.Add(url, body)
+
+		if err = json.Unmarshal(body, &resp); err != nil {
+			return err
+		}
 	}
 
 	cfg.NextURL = resp.Next
@@ -127,7 +146,7 @@ func commandMapb(cfg *Config) error {
 	return nil
 }
 
-func initializeCommands() {
+func initializeCommands(cache *pokecache.Cache) {
 	commands = map[string]cliCommand{
 		"exit": {
 			name:        "exit",
@@ -143,21 +162,23 @@ func initializeCommands() {
 			name:        "map",
 			description: "Displays names of 20 location areas in the Pokemon world",
 			callback: func() error {
-				return commandMap(&config)
+				return commandMap(&config, cache)
 			},
 		},
 		"mapb": {
 			name:        "mapb",
 			description: "Displays names of previous 20 location areas in the Pokemon world",
 			callback: func() error {
-				return commandMapb(&config)
+				return commandMapb(&config, cache)
 			},
 		},
 	}
 }
 
 func main() {
-	initializeCommands()
+	cache := pokecache.NewCache(5 * time.Second)
+
+	initializeCommands(cache)
 	scanner := bufio.NewScanner(os.Stdin)
 
 	for {
