@@ -196,33 +196,36 @@ func initializeCommands(cache *pokecache.Cache) {
 		"exit": {
 			name:        "exit",
 			description: "Exit the Pokedex",
-			callback:    func(args []string) error {
+			callback: func(args []string) error {
 				return commandExit()
+			},
 		},
 		"help": {
 			name:        "help",
 			description: "Displays a help message",
-			callback:    commandHelp,
+			callback: func(args []string) error {
+				return commandHelp()
+			},
 		},
 		"map": {
 			name:        "map",
 			description: "Displays names of 20 location areas in the Pokemon world",
-			callback: func() error {
+			callback: func(args []string) error {
 				return commandMap(&config, cache)
 			},
 		},
 		"mapb": {
 			name:        "mapb",
 			description: "Displays names of previous 20 location areas in the Pokemon world",
-			callback: func() error {
+			callback: func(args []string) error {
 				return commandMapb(&config, cache)
 			},
 		},
 		"explore": {
 			name:        "explore",
 			description: "Displays list of pokemon in a given location",
-			callback: func() error {
-				return commandExplore(&config, cache, location)
+			callback: func(args []string) error {
+				return commandExplore(&config, cache, args[1])
 			},
 		},
 	}
@@ -258,7 +261,7 @@ func main() {
 					fmt.Println(err)
 				}
 			} else {
-				err := cmd.callback()
+				err := cmd.callback(slices)
 				if err != nil {
 					fmt.Println(err)
 				}
