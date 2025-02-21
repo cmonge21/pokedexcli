@@ -17,7 +17,7 @@ import (
 type cliCommand struct {
 	name        string
 	description string
-	callback    func() error
+	callback    func([]string) error
 }
 
 type LocationAreaResp struct {
@@ -28,6 +28,14 @@ type LocationAreaResp struct {
 		Name string `json:"name"`
 		URL  string `json:"url"`
 	} `json:"results"`
+}
+
+type LocationArea struct {
+	PokemonEncounters []struct {
+		Pokemon struct {
+			Name string `json:"name"`
+		} `json:"pokemon"`
+	} `json:"pokemon_encounters"`
 }
 
 type Config struct {
@@ -146,12 +154,50 @@ func commandMapb(cfg *Config, cache *pokecache.Cache) error {
 	return nil
 }
 
+func commandExplore(cfg *Config, cache *pokecache.Cache, location string) error {
+	var resp LocationArea
+
+	url := "https://pokeapi.co/api/v2/location-area/" + location
+
+	if cachedData, ok := cache.Get(url); ok {
+		if err := json.Unmarshal(cachedData, &resp); err != nil {
+			return err
+		}
+	} else {
+		res, err := http.Get(url)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		body, err := io.ReadAll(res.Body)
+		res.Body.Close()
+		if res.StatusCode > 299 {
+			log.Fatalf("Response failed with status code: %d and\n body: %s\n", res.StatusCode, body)
+		}
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		cache.Add(url, body)
+
+		if err = json.Unmarshal(body, &resp); err != nil {
+			return err
+		}
+	}
+
+	for _, area := range resp.PokemonEncounters {
+		fmt.Println(area.Pokemon.Name)
+	}
+	return nil
+}
+
 func initializeCommands(cache *pokecache.Cache) {
 	commands = map[string]cliCommand{
 		"exit": {
 			name:        "exit",
 			description: "Exit the Pokedex",
-			callback:    commandExit,
+			callback:    func(args []string) error {
+				return commandExit()
 		},
 		"help": {
 			name:        "help",
@@ -170,6 +216,13 @@ func initializeCommands(cache *pokecache.Cache) {
 			description: "Displays names of previous 20 location areas in the Pokemon world",
 			callback: func() error {
 				return commandMapb(&config, cache)
+			},
+		},
+		"explore": {
+			name:        "explore",
+			description: "Displays list of pokemon in a given location",
+			callback: func() error {
+				return commandExplore(&config, cache, location)
 			},
 		},
 	}
@@ -195,12 +248,21 @@ func main() {
 		command := slices[0] // get the first word
 
 		if cmd, ok := commands[command]; ok {
-			err := cmd.callback()
-			if err != nil {
-				fmt.Println(err)
+			if command == "explore" {
+				if len(slices) < 2 {
+					fmt.Println("Please provide a location name")
+					continue
+				}
+				err := commandExplore(&config, cache, slices[1])
+				if err != nil {
+					fmt.Println(err)
+				}
+			} else {
+				err := cmd.callback()
+				if err != nil {
+					fmt.Println(err)
+				}
 			}
-		} else {
-			fmt.Println("Unknown command")
 		}
 
 	}
