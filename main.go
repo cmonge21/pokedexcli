@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math/rand"
 	"net/http"
 	"os"
 	"strings"
@@ -41,6 +42,12 @@ type LocationArea struct {
 type Config struct {
 	NextURL     string
 	PreviousURL string
+	Pokedex     map[string]Pokemon
+}
+
+type Pokemon struct {
+	Name           string `json:"name"`
+	BaseExperience int    `json:"base_experience"`
 }
 
 var config Config
@@ -191,6 +198,55 @@ func commandExplore(cfg *Config, cache *pokecache.Cache, location string) error 
 	return nil
 }
 
+func commandCatch(cfg *Config, cache *pokecache.Cache, name string) error {
+	fmt.Printf("Throwing a Pokeball at %v...\n", name)
+
+	var resp Pokemon
+
+	url := "https://pokeapi.co/api/v2/pokemon/" + name
+
+	if cachedData, ok := cache.Get(url); ok {
+		if err := json.Unmarshal(cachedData, &resp); err != nil {
+			return err
+		}
+	} else {
+		res, err := http.Get(url)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		body, err := io.ReadAll(res.Body)
+		res.Body.Close()
+		if res.StatusCode > 299 {
+			log.Fatalf("Response failed with status code: %d and\n body: %s\n", res.StatusCode, body)
+		}
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		cache.Add(url, body)
+
+		if err = json.Unmarshal(body, &resp); err != nil {
+			return err
+		}
+	}
+
+	chance := 50 - (resp.BaseExperience / 10) // Base experience reduces chance slightly
+	if chance < 1 {
+		chance = 1
+	}
+	caught := rand.Intn(100) < chance
+
+	if caught {
+		fmt.Printf("%s was caught!\n", name)
+		cfg.Pokedex[name] = resp
+	} else {
+		fmt.Printf("%s escaped!\n", name)
+	}
+
+	return nil
+}
+
 func initializeCommands(cache *pokecache.Cache) {
 	commands = map[string]cliCommand{
 		"exit": {
@@ -228,10 +284,20 @@ func initializeCommands(cache *pokecache.Cache) {
 				return commandExplore(&config, cache, args[1])
 			},
 		},
+		"catch": {
+			name:        "catch",
+			description: "Adds pokemon to user's Pokedex",
+			callback: func(args []string) error {
+				return commandCatch(&config, cache, args[1])
+			},
+		},
 	}
 }
 
 func main() {
+	config = Config{
+		Pokedex: make(map[string]Pokemon),
+	}
 	cache := pokecache.NewCache(5 * time.Second)
 
 	initializeCommands(cache)
