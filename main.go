@@ -48,6 +48,27 @@ type Config struct {
 type Pokemon struct {
 	Name           string `json:"name"`
 	BaseExperience int    `json:"base_experience"`
+	Height         int    `json:"height"`
+	Weight         int    `json:"weight"`
+	Stats          []Stat `json:"stats"`
+	Types          []Type `json:"types"`
+}
+
+type Stat struct {
+	BaseStat int      `json:"base_stat"`
+	Stat     StatName `json:"stat"`
+}
+
+type StatName struct {
+	Name string `json:"name"`
+}
+
+type Type struct {
+	Type TypeName `json:"type"`
+}
+
+type TypeName struct {
+	Name string `json:"name"`
 }
 
 var config Config
@@ -247,6 +268,36 @@ func commandCatch(cfg *Config, cache *pokecache.Cache, name string) error {
 	return nil
 }
 
+func commandInspect(cfg *Config, pokemonName string) {
+	pokemon, exists := cfg.Pokedex[pokemonName]
+	if !exists {
+		fmt.Println("you have not caught that pokemon")
+		return
+	}
+
+	fmt.Printf("Name: %s\n", pokemon.Name)
+	fmt.Printf("Height: %d\n", pokemon.Height)
+	fmt.Printf("Weight: %d\n", pokemon.Weight)
+
+	fmt.Println("Stats:")
+	for _, stat := range pokemon.Stats {
+		fmt.Printf("  -%s: %d\n", stat.Stat.Name, stat.BaseStat)
+	}
+
+	fmt.Println("Types:")
+	for _, t := range pokemon.Types {
+		fmt.Printf("  - %s\n", t.Type.Name)
+	}
+
+}
+
+func commandPokedex(cfg *Config) {
+	fmt.Println("Your Pokedex")
+	for _, pokemon := range cfg.Pokedex {
+		fmt.Printf("- %s\n", pokemon.Name)
+	}
+}
+
 func initializeCommands(cache *pokecache.Cache) {
 	commands = map[string]cliCommand{
 		"exit": {
@@ -289,6 +340,25 @@ func initializeCommands(cache *pokecache.Cache) {
 			description: "Adds pokemon to user's Pokedex",
 			callback: func(args []string) error {
 				return commandCatch(&config, cache, args[1])
+			},
+		},
+		"inspect": {
+			name:        "inspect",
+			description: "Prints the name, height, weight, stats and type(s) of the Pokemon",
+			callback: func(args []string) error {
+				if len(args) < 2 {
+					return fmt.Errorf("please provde a pokemon name")
+				}
+				commandInspect(&config, args[1])
+				return nil
+			},
+		},
+		"pokedex": {
+			name:        "pokdex",
+			description: "Prints list of pokemon caught",
+			callback: func(args []string) error {
+				commandPokedex(&config)
+				return nil
 			},
 		},
 	}
